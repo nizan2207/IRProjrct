@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify
-
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
         super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
@@ -38,8 +37,8 @@ def search():
 @app.route("/search_body")
 def search_body():
     ''' Returns up to a 100 search results for the query using TFIDF AND COSINE
-        SIMILARITY OF THE BODY OF ARTICLES ONLY. DO NOT use stemming. DO USE the 
-        staff-provided tokenizer from Assignment 3 (GCP part) to do the 
+        SIMI.LARITY OF THE BODY OF ARTICLES ONLY DO NOT use stemming. DO USE the
+        staff-provided tokenizer from Assignment 3 (GCP part) to do the
         tokenization and remove stopwords. 
 
         To issue a query navigate to a URL like:
@@ -56,6 +55,11 @@ def search_body():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
+    english_stopwords = frozenset(stopwords.words('english'))
+    corpus_stopwords = ['category', 'references', 'also', 'links', 'extenal', 'see', 'thumb']
+    RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
+    all_stopwords = english_stopwords.union(corpus_stopwords)
+    tokens = [token.group() for token in RE_WORD.finditer(text.lower())]
 
     # END SOLUTION
     return jsonify(res)
