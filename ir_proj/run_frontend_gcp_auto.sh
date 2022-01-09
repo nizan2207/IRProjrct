@@ -1,3 +1,4 @@
+
 INSTANCE_NAME="instance-1"
 REGION=us-central1
 ZONE=us-central1-c
