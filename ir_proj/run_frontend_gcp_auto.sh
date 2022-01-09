@@ -35,9 +35,9 @@ sleep 5
 
 # 4. Secure copy your app to the VM
 gcloud compute scp search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME                                                                                                      100%   44KB 143.6KB/s   00:00    
-zehaviam@cloudshell:~ (irproject-206655839)$ gcloud compute scp IdTitle.pickle  $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
-zehaviam@cloudshell:~ (irproject-206655839)$ gcloud compute scp index.pickle   $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
-zehaviam@cloudshell:~ (irproject-206655839)$ gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
+gcloud compute scp IdTitle.pickle  $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+gcloud compute scp index.pickle   $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+
 # 5. SSH to your VM and start the app
 gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
 
