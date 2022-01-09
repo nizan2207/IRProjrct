@@ -446,10 +446,7 @@ inverted.read_index('','index.pkl')
 '''
 
 #reading and saving the titkle id dict so we cxan connect id to their title
-import os
-from google.colab import drive
-drive.mount('/content/gdrive')
-id_title_pickle = '/content/gdrive/MyDrive/id_title_dict.pkl'
+id_title_pickle = "IdTitle.pickle"
 with open(id_title_pickle, 'rb') as f:
   id_title_dict = dict(pickle.loads(f.read()))
 """### Functions from previous Assignments"""
@@ -943,7 +940,8 @@ class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
       #load index.pkl into variable named inverted
       # self.index = InvertedIndex.read_index()
-      self.index = pickle.load("C:\Users\Giran\PycharmProjects\IRProj\index.pkl")
+      with open("index.pickle", 'rb') as f:
+        self.index = pickle.loads(f.read())
       super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
 app = MyFlaskApp(__name__)

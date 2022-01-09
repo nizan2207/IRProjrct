@@ -19,7 +19,7 @@ gcloud compute addresses create $IP_NAME --project=$PROJECT_NAME --region=$REGIO
 gcloud compute addresses list
 # note the IP address printed above, that's your extrenal IP address.
 # Enter it here: 
-INSTANCE_IP="34.134.140.0"
+INSTANCE_IP="34.136.248.83"
 
 # 2. Create Firewall rule to allow traffic to port 8080 on the instance
 gcloud compute firewall-rules create default-allow-http-8080 \
@@ -40,7 +40,7 @@ gcloud compute instances tail-serial-port-output $INSTANCE_NAME --zone $ZONE
 
 # 4. Secure copy your app to the VM
 gcloud compute scp LOCAL_PATH_TO/search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
-gcloud compute scp  C:/Users/Giran/Documents/index.pickle $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+gcloud compute scp C:/Users/Giran/Desktop/IRProjrct/ir_proj/search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
 gcloud compute scp search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
 # 5. SSH to your VM and start the app
 gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
@@ -48,10 +48,20 @@ python3 search_frontend.py
 
 ################################################################################
 # Clean up commands to undo the above set up and avoid unnecessary charges
-gcloud compute instances delete -q $INSTANCE_NAME
+gcloud compute instances delete -q $INSTANCE_NAME --zone $ZONE
 # make sure there are no lingering instances
 gcloud compute instances list
 # delete firewall rule
 gcloud compute firewall-rules delete -q default-allow-http-8080
 # delete external addresses
 gcloud compute addresses delete -q $IP_NAME --region $REGION
+
+###############################################################################
+What actually worked
+gcloud compute scp search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+search_frontend.py                                                                                                                       100%   44KB 143.6KB/s   00:00    
+zehaviam@cloudshell:~ (irproject-206655839)$ gcloud compute scp IdTitle.pickle  $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+IdTitle.pickle                                                                                                                           100%  169MB  17.5MB/s   00:09    
+zehaviam@cloudshell:~ (irproject-206655839)$ gcloud compute scp index.pickle   $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+index.pickle                                                                                                                             100%  102KB 238.8KB/s   00:00    
+zehaviam@cloudshell:~ (irproject-206655839)$ gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
