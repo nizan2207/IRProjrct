@@ -31,7 +31,7 @@ gcloud compute instances create $INSTANCE_NAME \
   --scopes=https://www.googleapis.com/auth/cloud-platform \
   --tags=http-server
 
-sleep 5
+sleep 5m
 
 # 4. Secure copy your app to the VM
 gcloud compute scp search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME                                                                                                      100%   44KB 143.6KB/s   00:00    
