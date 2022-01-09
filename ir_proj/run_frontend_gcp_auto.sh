@@ -17,19 +17,10 @@ gcloud compute addresses create $IP_NAME --project=$PROJECT_NAME --region=$REGIO
 INSTANCE_IP=$(gcloud compute addresses list | grep ADD | awk '{print $2}')
 
 # 2. Create Firewall rule to allow traffic to port 8080 on the instance
-gcloud compute firewall-rules create default-allow-http-8080 \
-  --allow tcp:8080 \
-  --source-ranges 0.0.0.0/0 \
-  --target-tags http-server
+gcloud compute firewall-rules create default-allow-http-8080 --allow tcp:8080 --source-ranges 0.0.0.0/0 --target-tags http-server
 
 # 3. Create the instance. Change to a larger instance (larger than e2-micro) as needed.
-gcloud compute instances create $INSTANCE_NAME \
-  --zone=$ZONE \
-  --machine-type=e2-micro \
-  --network-interface=address=$INSTANCE_IP,network-tier=PREMIUM,subnet=default \
-  --metadata-from-file startup-script=startup_script_gcp.sh \
-  --scopes=https://www.googleapis.com/auth/cloud-platform \
-  --tags=http-server
+gcloud compute instances create $INSTANCE_NAME --zone=$ZONE --machine-type=e2-micro --network-interface=address=$INSTANCE_IP,network-tier=PREMIUM,subnet=default --metadata-from-file startup-script=startup_script_gcp.sh --scopes=https://www.googleapis.com/auth/cloud-platform --tags=http-server
 
 sleep 5m
 
