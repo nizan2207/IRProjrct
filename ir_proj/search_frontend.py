@@ -19,14 +19,6 @@ spark_jars = '/usr/local/lib/python3.7/dist-packages/pyspark/jars'
 graphframes_jar = 'https://repos.spark-packages.org/graphframes/graphframes/0.8.2-spark3.2-s_2.12/graphframes-0.8.2-spark3.2-s_2.12.jar'
 !wget -N -P $spark_jars $graphframes_jar
 '''
-# pyspark imports
-import pyspark
-from pyspark.sql import *
-from pyspark.sql.functions import *
-from pyspark import SparkContext, SparkConf
-from pyspark.sql import SQLContext
-from pyspark.ml.feature import Tokenizer, RegexTokenizer
-from graphframes import *
 
 from flask import Flask, request, jsonify
 import sys
@@ -519,10 +511,10 @@ def generate_document_tfidf_matrix(query_to_search, index, words, pls):
     -----------
     DataFrame of tfidf scores.
     """
-    print(f"Query: {query_to_search} \nwords:{words}")
+
     total_vocab_size = len(index.term_total)
     candidates_scores = get_candidate_documents_and_scores(query_to_search, index, words,pls)  # We do not need to utilize all document. Only the docuemnts which have corrspoinding terms with the query.
-    print(candidates_scores)
+
     unique_candidates = np.unique([doc_id for doc_id, freq in candidates_scores.keys()])
     D = np.zeros((len(unique_candidates), total_vocab_size))
     D = pd.DataFrame(D)
@@ -530,7 +522,7 @@ def generate_document_tfidf_matrix(query_to_search, index, words, pls):
 
     D.index = unique_candidates
     D.columns = index.term_total.keys()
-    print(f"D2: \n{D}" )
+
     for key in candidates_scores:
         tfidf = candidates_scores[key]
         doc_id, term = key
@@ -561,7 +553,7 @@ def generate_query_tfidf_vector(query_to_search, index):
 
     epsilon = .0000001
     total_vocab_size = len(index.term_total)
-    print("TOT vocab size ", total_vocab_size)
+
     Q = np.zeros((total_vocab_size))
     term_vector = list(index.term_total.keys())
     counter = Counter(query_to_search)
@@ -638,7 +630,7 @@ def get_candidate_documents_and_scores(query_to_search, index, words, pls):
     """
     candidates = {}
     N = len(DL)
-    print("QueryToSearch ", query_to_search)
+
     for term in np.unique(query_to_search):
         if term in words:
             list_of_doc = pls[words.index(term)]
@@ -928,13 +920,6 @@ class InvertedIndex:
     path_globals.unlink()
     for p in Path(base_dir).rglob(f'{name}_*.bin'):
       p.unlink()
-  
-
-
-if __name__ == '__main__':
-  pass
-    # run the Flask RESTful API, make the server publicly available (host='0.0.0.0') on port 8080
-    # app.run(host='0.0.0.0', port=8080, debug=True)
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
@@ -974,13 +959,47 @@ def search():
     query = tokenize(query)
     index = inverted
     words, p_lst = get_posting_gen(index)
-    
-    #doc_tfidf_mat = #generate_document_tfidf_matrix(query, index, words, p_lst)
-    print(doc_tfidf_mat)
-    query_tfidf = generate_query_tfidf_vector(query, index)
+
+    # doc_tfidf_mat = generate_document_tfidf_matrix(query, index, words, p_lst)
+    # print(doc_tfidf_mat)
+    '''
+    for i in range (2):
+      print(words[i])
+      print(p_lst[i])
+    '''
+    # computing the tfidf matrix
+    # calculating N (number of docs relevnt to a qurey)
+    n = []
+    for Qword in query:
+        ind = words.index(Qword)
+        n.extend(p_lst[ind])
+    n = list(dict.fromkeys(n))
+    N = len(n)
+    Q = np.zeros((len(words)))
+    ids = []
+    for i in n:
+        ids.append(i[0])
+    doc_tfidf_mat = np.zeros((N, len(words)))
+    doc_tfidf_mat = pd.DataFrame(doc_tfidf_mat)
+    doc_tfidf_mat.columns = words
+    doc_tfidf_mat.index = ids
+    for Qword in query:
+        ind = words.index(Qword)
+        df = len(p_lst[ind])
+        idf = math.log2(N / df)
+        for i in p_lst[ind]:
+            raw = i[0]
+            tf = i[1]
+            tfidf = tf * df
+            doc_tfidf_mat.at[raw, Qword] = tfidf
+
+    query_tfidf = generate_query_tfidf_vector1(query, words, N, p_lst)
+
     cos_sim_dict = cosine_similarity(doc_tfidf_mat, query_tfidf)
     top_n = get_top_n(cos_sim_dict, 100)
-    print(top_n)
+    # id_title_dict = id_title.collectAsMap()
+    for i in top_n:
+        res.append((i[0], id_title_dict[i[0]]))
 
     # END SOLUTION
     return jsonify(res)
@@ -1034,11 +1053,9 @@ def search_body():
     words, p_lst = get_posting_gen(index)
     #nizan### changed from index to index 2
     doc_tfidf_mat = generate_document_tfidf_matrix(query, index, words, p_lst)
-    print(doc_tfidf_mat)
     query_tfidf = generate_query_tfidf_vector(query, index)
     cos_sim_dict = cosine_similarity(doc_tfidf_mat, query_tfidf)
     top_n = get_top_n(cos_sim_dict, 100)
-    print(top_n)
 
     # END SOLUTION
     return jsonify(res)
@@ -1218,13 +1235,13 @@ def body_index():
         doc_tfidf_mat.at[raw,Qword] = tfidf
 
     query_tfidf = generate_query_tfidf_vector1(query, words, N, p_lst)
-    print(query_tfidf)
+
     cos_sim_dict = cosine_similarity(doc_tfidf_mat, query_tfidf)
     top_n = get_top_n(cos_sim_dict, 100)
     #id_title_dict = id_title.collectAsMap()
     for i in top_n:
       res.append((i[0],id_title_dict[i[0]]))
-    print(res)
+
     
     # END SOLUTION
     return jsonify(res)
