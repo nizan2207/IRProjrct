@@ -21,7 +21,7 @@ INSTANCE_IP=$(gcloud compute addresses list | grep ADD | awk '{print $2}')
 gcloud compute firewall-rules create default-allow-http-8080 --allow tcp:8080 --source-ranges 0.0.0.0/0 --target-tags http-server
 
 # 3. Create the instance. Change to a larger instance (larger than e2-micro) as needed.
-gcloud compute instances create $INSTANCE_NAME --zone=$ZONE --machine-type=e2-micro --network-interface=address=$INSTANCE_IP,network-tier=PREMIUM,subnet=default --metadata-from-file startup-script=startup_script_gcp.sh --scopes=https://www.googleapis.com/auth/cloud-platform --tags=http-server
+gcloud compute instances create $INSTANCE_NAME --zone=$ZONE --machine-type=standard-2 --network-interface=address=$INSTANCE_IP,network-tier=PREMIUM,subnet=default --metadata-from-file startup-script=startup_script_gcp.sh --scopes=https://www.googleapis.com/auth/cloud-platform --tags=http-server
 
 sleep 5m
 
@@ -34,5 +34,13 @@ gcloud compute scp index.pickle   $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOO
 gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
 
 # run the app
-python3 search_frontend.py
 
+pip install flask
+pip install numpy
+pip install pandas
+pip install nltk
+pip install google.cloud
+pip install google-cloud-storage
+pip install gcsfs
+
+python3 search_frontend.py
