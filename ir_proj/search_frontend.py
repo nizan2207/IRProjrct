@@ -1,13 +1,5 @@
-
 # pyspark imports
-import pyspark
-from pyspark.sql import *
-from pyspark.sql.functions import *
-from pyspark import SparkContext, SparkConf
-from pyspark.sql import SQLContext
-from pyspark.ml.feature import Tokenizer, RegexTokenizer
 from graphframes import *
-
 from flask import Flask, request, jsonify
 import sys
 import re
@@ -26,22 +18,6 @@ import math
 import nltk
 nltk.download('stopwords')
 from nltk.corpus import stopwords
-
-# set up spark for its functions
-spark_jars = '/usr/local/lib/python3.7/dist-packages/pyspark/jars'
-graphframes_jar = 'https://repos.spark-packages.org/graphframes/graphframes/0.8.2-spark3.2-s_2.12/graphframes-0.8.2-spark3.2-s_2.12.jar'
-conf = SparkConf().set("spark.ui.port", "4050")
-
-# Catches sparkcontext exists error
-sc = pyspark.SparkContext(conf=conf)
-
-
-sc.addPyFile(str(Path(spark_jars) / Path(graphframes_jar).name))
-spark = SparkSession.builder.getOrCreate()
-
-full_path = "gs://wikidata_preprocessed/*"
-parquetFile = spark.read.parquet(full_path)
-doc_text_pairs = parquetFile.select("text", "id").rdd
 
 def tokenize(text, stopwords_set='english'):
     """
@@ -77,20 +53,10 @@ import hashlib
 def _hash(s):
     return hashlib.blake2b(bytes(s, encoding='utf8'), digest_size=5).hexdigest()
 
-# Initializing spark context
-# create a spark context and session
-conf = SparkConf().set("spark.ui.port", "4050")
-sc = pyspark.SparkContext(conf=conf)
-sc.addPyFile(str(Path(spark_jars) / Path(graphframes_jar).name))
-spark = SparkSession.builder.getOrCreate()
-
 # Copy one wikidumps files 
 import os
 from pathlib import Path
 from google.colab import auth
-
-from pathlib import Path 
-import os
 
 # take the 'text' and 'id' or the first 1000 rows and create an RDD from it
 english_stopwords = frozenset(stopwords.words('english'))
@@ -126,8 +92,6 @@ def word_count(text, id):
   res = [(entry[0], tuple(entry[1])) for entry in word_dict.items()]
   return res
 
-word_counts = doc_text_pairs.flatMap(lambda x: word_count(x[0], x[1]))
-
 def reduce_word_counts(unsorted_pl):
   ''' Returns a sorted posting list by wiki_id.
   Parameters:
@@ -142,52 +106,9 @@ def reduce_word_counts(unsorted_pl):
   l = list(unsorted_pl)
   return sorted(l, key = lambda item: item[0])
 
-postings = word_counts.groupByKey().mapValues(reduce_word_counts)
-
-postings_filtered = postings.filter(lambda x: len(x[1])>50)
-
-def calculate_df(postings):
-  ''' Takes a posting list RDD and calculate the df for each token.
-  Parameters:
-  -----------
-    postings: RDD
-      An RDD where each element is a (token, posting_list) pair.
-  Returns:
-  --------
-    RDD
-      An RDD where each element is a (token, df) pair.
-  '''
-  return postings.mapValues(len) 
-
-w2df = calculate_df(postings_filtered)
-
 NUM_BUCKETS = 124
 def token2bucket_id(token):
   return int(_hash(token),16) % NUM_BUCKETS
-
-def partition_postings_and_write(postings):
-  ''' A function that partitions the posting lists into buckets, writes out 
-  all posting lists in a bucket to disk, and returns the posting locations for 
-  each bucket. Partitioning should be done through the use of `token2bucket` 
-  above. Writing to disk should use the function  `write_a_posting_list`, a 
-  static method implemented in inverted_index_colab.py under the InvertedIndex 
-  class. 
-  Parameters:
-  -----------
-    postings: RDD
-      An RDD where each item is a (w, posting_list) pair.
-  Returns:
-  --------
-    RDD
-      An RDD where each item is a posting locations dictionary for a bucket. The
-      posting locations maintain a list for each word of file locations and 
-      offsets its posting list was written to. See `write_a_posting_list` for 
-      more details.
-  '''
-  r1 = postings.map(lambda tup: (token2bucket_id(tup[0]), [tup]))
-  r2 = r1.reduceByKey(lambda p_lst1, p_lst2: p_lst1 + p_lst2) # group_by_key
-  r3 = r2.map(lambda tup: InvertedIndex.write_a_posting_list(tup))
-  return r3
 
 """# Inverted Index"""
 
@@ -373,25 +294,19 @@ class InvertedIndex:
 
 """### Postings list"""
 
-posting_locs_list = partition_postings_and_write(postings_filtered).collect()
-super_posting_locs = defaultdict(list)
-for posting_loc in posting_locs_list:
-  for k, v in posting_loc.items():
-    super_posting_locs[k].extend(v)
+# # Create inverted index instance
+# inverted = None
+# with open("index.pickle", 'rb') as f:
+#     inverted = dict(pickle.loads(f.read()))
+# # Adding the posting locations dictionary to the inverted index
+# inverted.posting_locs = super_posting_locs
+# # Add the token - df dictionary to the inverted index
+# inverted.df = w2df_dict
+# # write the global stats out
+# inverted.write_index('.', 'index')
 
-w2df_dict = w2df.collectAsMap()
-
-# Create inverted index instance
-inverted = None
-with open("index.pickle", 'rb') as f:
-    inverted = dict(pickle.loads(f.read()))
-# Adding the posting locations dictionary to the inverted index
-inverted.posting_locs = super_posting_locs
-# Add the token - df dictionary to the inverted index
-inverted.df = w2df_dict
-# write the global stats out
-inverted.write_index('.', 'index')
-
+index = InvertedIndex()
+index.read_index()
 """### Functions from previous Assignments"""
 
 def get_posting_gen(index):
@@ -865,8 +780,15 @@ class InvertedIndex:
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
+        # create inverted index
         self.first_index = inverted
-        words, p_lst = get_posting_gen(self.first_index)
+        # Adding the posting locations dictionary to the inverted index
+        # inverted.posting_locs = super_posting_locs
+        # Add the token - df dictionary to the inverted index
+        # inverted.df = w2df_dict
+        # write the global stats out
+        inverted.write_index('.', 'index')
+        # words, p_lst = get_posting_gen(self.first_index)
         super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
     app = MyFlaskApp(__name__)
