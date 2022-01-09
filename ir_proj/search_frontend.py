@@ -942,6 +942,8 @@ if __name__ == '__main__':
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
       #load index.pkl into variable named inverted
+      # self.index = InvertedIndex.read_index()
+      self.index = pickle.load("C:\Users\Giran\PycharmProjects\IRProj\index.pkl")
       super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
 app = MyFlaskApp(__name__)
