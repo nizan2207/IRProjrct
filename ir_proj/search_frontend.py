@@ -811,7 +811,16 @@ class InvertedIndex:
     locs = writer.write(b)
     # save file locations to index
     self.posting_locs[w].extend(locs) 
-
+  def read_posting_list(self,w):
+    with closing(MultiFileReader()) as reader:
+      locs = self.posting_locs[w]
+      b= reader.read(locs, self.df[w]*TUPLE_SIZE)
+      posting_dict = {}
+      for i in range(self.df[w]):
+        doc_id = int.from_bytes(b[i*TUPLE_SIZE:i*TUPLE_SIZE+4],'big')
+        tf = int.from_bytes(b[i*TUPLE_SIZE+4:(i+1)*TUPLE_SIZE], 'big')
+        posting_dict[doc_id] = tf
+      return posting_dict
   def __getstate__(self):
     """ Modify how the object is pickled by removing the internal posting lists
         from the object's state dictionary. 
@@ -832,13 +841,15 @@ class InvertedIndex:
     for p in Path(base_dir).rglob(f'{name}_*.bin'):
       p.unlink()
 
-inverted = InvertedIndex()
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
       #load index.pkl into variable named inverted
       # self.index = InvertedIndex.read_index()
-      with open("index.pickle", 'rb') as f:
+      with open("index.pkl", 'rb') as f:
         inverted = pickle.loads(f.read())
+        inverted = InvertedIndex(inverted)
+        inverted.posting_locs = super_posting_locs
+        self.inverted = inverted
       super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
 app = MyFlaskApp(__name__)
@@ -869,9 +880,9 @@ def search():
       return jsonify(res)
     # BEGIN SOLUTION
     query = tokenize(query)
-    index = inverted
+    index = app.inverted
     words, p_lst = get_posting_gen(index)
-
+    print(index.read_posting_list("Hello"))
     # doc_tfidf_mat = generate_document_tfidf_matrix(query, index, words, p_lst)
     # print(doc_tfidf_mat)
     '''
@@ -882,6 +893,7 @@ def search():
     # computing the tfidf matrix
     # calculating N (number of docs relevnt to a qurey)
     n = []
+    #change
     for Qword in query:
         ind = words.index(Qword)
         n.extend(p_lst[ind])
