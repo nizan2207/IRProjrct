@@ -55,6 +55,7 @@ def tokenize(text, stopwords_set='english'):
 def _hash(s):
     return hashlib.blake2b(bytes(s, encoding='utf8'), digest_size=5).hexdigest()
 
+
 english_stopwords = frozenset(stopwords.words('english'))
 corpus_stopwords = ['category', 'references', 'also', 'links', 'extenal', 'see', 'thumb']
 RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
@@ -831,12 +832,13 @@ class InvertedIndex:
     for p in Path(base_dir).rglob(f'{name}_*.bin'):
       p.unlink()
 
+inverted = InvertedIndex()
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
       #load index.pkl into variable named inverted
       # self.index = InvertedIndex.read_index()
       with open("index.pickle", 'rb') as f:
-        self.index = pickle.loads(f.read())
+        inverted = pickle.loads(f.read())
       super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
 app = MyFlaskApp(__name__)
@@ -1077,6 +1079,10 @@ def get_pageview():
     # END SOLUTION
     return jsonify(res)
 
+
+if __name__ == '__main__':
+    #run flask app
+    app.run(host='0.0.0.0',port=8080,debug=False)
 """## Body Index"""
 
 
@@ -1085,6 +1091,7 @@ def id_title_tup(id):
 
 # Tests
 # NOTE May need token2bucket. Our tokenizer isnt from a3 gcp.
+'''
 def body_index():
     res = []
     query = "computer engineering" # query = request.args.get('query', '')
@@ -1113,11 +1120,7 @@ def body_index():
     
     #doc_tfidf_mat = generate_document_tfidf_matrix(query, index, words, p_lst)
     #print(doc_tfidf_mat)
-    '''
-    for i in range (2):
-      print(words[i])
-      print(p_lst[i])
-    '''
+    #print(doc_tfidf_mat)
     #computing the tfidf matrix 
     #calculating N (number of docs relevnt to a qurey)
     n = []
@@ -1155,4 +1158,5 @@ def body_index():
     
     # END SOLUTION
     return jsonify(res)
-body_index()
+#body_index()
+'''
