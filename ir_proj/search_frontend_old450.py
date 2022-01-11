@@ -881,42 +881,40 @@ def search():
     # BEGIN SOLUTION
     query = tokenize(query)
     index = app.inverted
+    posting_lists = [index.read_posting_list(w) for w in query]  # words, p_lst = get_posting_gen(index)
+    print(index.read_posting_list("Hello"))
+    # doc_tfidf_mat = generate_document_tfidf_matrix(query, index, words, p_lst)
+    # print(doc_tfidf_mat)
 
-  
-    # Save postings lists to memory, calculate dfs
-    word_postings = dict()
-    word_df = dict()
+    # computing the tfidf matrix
+    # calculating N (number of docs relevnt to a qurey)
+    n = []
+    #change
     for Qword in query:
-        word_postings[Qword] = index.read_posting_list(Qword)
-        word_df[Qword]= len(word_postings[Qword])
-
-    # Calculate unique doc_ids
+        ind = words.index(Qword)
+        n.extend(p_lst[ind])
+    n = list(dict.fromkeys(n))
+    N = len(n)
+    Q = np.zeros((len(words)))
     ids = []
-    id_set = set() # just to make sure there are no doubles. Could use unique on ids later instead. (If there is a memory issue)
-    for n in word_postings:
-        for i in n: # for every (doc_id, tf) in all postings lists:
-            if i[0] not in id_set:
-                id_set.add(i[0])
-                ids.append(i[0])
-    
-    # calculate number of docs,create Doc_tfidf matrix.
-    N = len(id_set)
-    Q = np.zeros((len(query)))
-    # ids is a list of unique ids. The first ids to appear are first in the list.
-    doc_tfidf_mat = np.zeros((N, len(query)))
+    for i in n:
+        ids.append(i[0])
+    doc_tfidf_mat = np.zeros((N, len(words)))
     doc_tfidf_mat = pd.DataFrame(doc_tfidf_mat)
-    doc_tfidf_mat.columns = query
+    doc_tfidf_mat.columns = words
     doc_tfidf_mat.index = ids
     for Qword in query:
-        idf = math.log10(N / word_df[Qword])
-        for i in word_postings[Qword]:
+        ind = words.index(Qword)
+        df = len(p_lst[ind])
+        idf = math.log2(N / df)
+        for i in p_lst[ind]:
             raw = i[0]
             tf = i[1]
-            tfidf = tf * idf
+            tfidf = tf * df
             doc_tfidf_mat.at[raw, Qword] = tfidf
 
-    # Cosine Similarity
-    query_tfidf = generate_query_tfidf_vector(query, index)
+    query_tfidf = generate_query_tfidf_vector1(query, words, N, p_lst)
+
     cos_sim_dict = cosine_similarity(doc_tfidf_mat, query_tfidf)
     top_n = get_top_n(cos_sim_dict, 100)
     # id_title_dict = id_title.collectAsMap()
