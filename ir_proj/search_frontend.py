@@ -725,6 +725,11 @@ class MyFlaskApp(Flask):
         #inverted = InvertedIndex(inverted)
         #inverted.posting_locs = super_posting_locs
         self.inverted = inverted
+      """
+      # PageRank
+      with open('doc_PR_dict.pkl', 'rb') as f:
+          self.doc_PR_dict = pickle.loads(f.open())
+      """
       super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
 app = MyFlaskApp(__name__)
@@ -918,11 +923,21 @@ def get_pagerank():
         list of floats:
           list of PageRank scores that correrspond to the provided article IDs.
     '''
+
+    """
     res = []
     wiki_ids = request.get_json()
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
+    for id in wiki_ids:
+        id_val = 0
+        try:
+            id_val = self.doc_PR_dict[str(id)]
+        except:
+            pass
+        res.append(value)
+    """
 
     # END SOLUTION
     return jsonify(res)
