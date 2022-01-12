@@ -18,7 +18,6 @@ nltk.download('stopwords')
 from nltk.corpus import stopwords
 from google.cloud import storage
 import hashlib
-import gcsfs
 
 
 def tokenize(text, stopwords_set='english'):
@@ -333,12 +332,13 @@ fs = gcsfs.GCSFileSystem(project = 'irproject-206655839')
 with fs.open('ir-project_bucket_amirnitzan') as f:
     posting_locs = pickle.load(f)
 '''
-
-bucket_name = 'ir-project_bucket_amirnitzan'
-client = storage.Client()
+'''
+bucket_name = 'ir-nitzan_amir_bucket_206655839'
+client = storage.Client('project2-337820')
 blobs = client.list_blobs(bucket_name)
 
 super_posting_locs = defaultdict(list)
+print(client.list_blobs(bucket_name))
 for blob in client.list_blobs(bucket_name, prefix=''):
   if not blob.name.endswith("pickle"):
     continue
@@ -346,10 +346,10 @@ for blob in client.list_blobs(bucket_name, prefix=''):
     posting_locs = pickle.load(f)
     for k, v in posting_locs.items():
         super_posting_locs[k].extend(v)
-
+'''
 
 #reading and saving the titkle id dict so we cxan connect id to their title
-id_title_pickle = "IdTitle.pickle"
+id_title_pickle = "id_title_dict.pickle"
 with open(id_title_pickle, 'rb') as f:
   id_title_dict = dict(pickle.loads(f.read()))
 """### Functions from previous Assignments"""
@@ -730,7 +730,7 @@ class InvertedIndex:
     # starts. 
     self.posting_locs = defaultdict(list)
     
-    for doc_id, tokens in docs.items():
+    for doc_id, tokens in docs.items(): 
       self.add_doc(doc_id, tokens)
   
   def posting_lists_iter(self):
@@ -859,8 +859,8 @@ class MyFlaskApp(Flask):
       # self.index = InvertedIndex.read_index()
       with open("body_index.pkl", 'rb') as f:
         inverted = pickle.loads(f.read())
-        inverted = InvertedIndex(inverted)
-        inverted.posting_locs = super_posting_locs
+        #inverted = InvertedIndex(inverted)
+        #inverted.posting_locs = super_posting_locs
         self.inverted = inverted
       super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
@@ -934,7 +934,6 @@ def search():
     # id_title_dict = id_title.collectAsMap()
     for i in top_n:
         res.append((i[0], id_title_dict[i[0]]))
-
     # END SOLUTION
     return jsonify(res)
 
