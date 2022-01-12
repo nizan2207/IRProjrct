@@ -810,17 +810,29 @@ class InvertedIndex:
     # write to file(s)
     locs = writer.write(b)
     # save file locations to index
-    self.posting_locs[w].extend(locs) 
-  def read_posting_list(self,w):
+    self.posting_locs[w].extend(locs)
+
+  def read_posting_list(inverted, w):
     with closing(MultiFileReader()) as reader:
-      locs = self.posting_locs[w]
-      b= reader.read(locs, self.df[w]*TUPLE_SIZE)
-      posting_dict = {}
-      for i in range(self.df[w]):
-        doc_id = int.from_bytes(b[i*TUPLE_SIZE:i*TUPLE_SIZE+4],'big')
-        tf = int.from_bytes(b[i*TUPLE_SIZE+4:(i+1)*TUPLE_SIZE], 'big')
-        posting_dict[doc_id] = tf
-      return posting_dict
+        locs = inverted.posting_locs[w]
+        b = reader.read(locs, inverted.df[w] * TUPLE_SIZE)
+        posting_list = []
+        for i in range(inverted.df[w]):
+            doc_id = int.from_bytes(b[i * TUPLE_SIZE:i * TUPLE_SIZE + 4], 'big')
+            tf = int.from_bytes(b[i * TUPLE_SIZE + 4:(i + 1) * TUPLE_SIZE], 'big')
+            posting_list.append((doc_id, tf))
+    return posting_list
+    # This was the old posting list before we replaced it with the above
+  #def read_posting_list(self,w):
+  #  with closing(MultiFileReader()) as reader:
+  #    locs = self.posting_locs[w]
+  #    b= reader.read(locs, self.df[w]*TUPLE_SIZE)
+  #    posting_dict = {}
+  #    for i in range(self.df[w]):
+  #      doc_id = int.from_bytes(b[i*TUPLE_SIZE:i*TUPLE_SIZE+4],'big')
+  #      tf = int.from_bytes(b[i*TUPLE_SIZE+4:(i+1)*TUPLE_SIZE], 'big')
+  #      posting_dict[doc_id] = tf
+  #    return posting_dict
   def __getstate__(self):
     """ Modify how the object is pickled by removing the internal posting lists
         from the object's state dictionary. 
@@ -845,7 +857,7 @@ class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
       #load index.pkl into variable named inverted
       # self.index = InvertedIndex.read_index()
-      with open("index.pkl", 'rb') as f:
+      with open("body_index.pkl", 'rb') as f:
         inverted = pickle.loads(f.read())
         inverted = InvertedIndex(inverted)
         inverted.posting_locs = super_posting_locs

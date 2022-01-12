@@ -1,8 +1,8 @@
 
-INSTANCE_NAME="instance-2"
+INSTANCE_NAME="instance-4"
 REGION=us-central1
 ZONE=us-central1-c
-PROJECT_NAME="irproject-206655839"
+PROJECT_NAME="project2-337820"
 IP_NAME="$PROJECT_NAME-ip"
 GOOGLE_ACCOUNT_NAME="zehaviam" # without the @post.bgu.ac.il or @gmail.com part
 
@@ -26,7 +26,7 @@ gcloud compute instances create $INSTANCE_NAME --zone=$ZONE --machine-type=n2d-s
 sleep 5m
 
 # 4. Secure copy your app to the VM
-gsutil -m cp -r "gs://ir-project_bucket_amirnitzan/*" /home/zehaviam/
+gsutil -m cp -r "gs://nitzan_amir_bucket_206655839/*" /home/zehaviam/
 #gcloud compute scp search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
 #gcloud compute scp IdTitle.pickle  $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
 #gcloud compute scp index.pickle   $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
