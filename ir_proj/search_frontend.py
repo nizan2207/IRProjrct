@@ -326,7 +326,6 @@ def generate_query_tfidf_vector(query_to_search, index):
 
     epsilon = .0000001
     total_vocab_size = len(index.term_total)
-
     Q = np.zeros((total_vocab_size))
     term_vector = list(index.term_total.keys())
     counter = Counter(query_to_search)
@@ -342,6 +341,7 @@ def generate_query_tfidf_vector(query_to_search, index):
             except:
                 pass
     return Q
+  
 def generate_query_tfidf_vector1(query_to_search, words, DL, p_lst):
     """
     Generate a vector representing the query. Each entry within this vector represents a tfidf score.
@@ -542,6 +542,8 @@ class MultiFileReader:
         b = []
         for f_name, offset in locs:
             if f_name not in self._open_files:
+              path = '/content/drive/MyDrive/body_bins/'
+              f_name = path + f_name
               self._open_files[f_name] = open(f_name, 'rb')
             f = self._open_files[f_name]
             f.seek(offset)
@@ -581,7 +583,7 @@ def read_posting_list(index, w, name):
     
     with closing(MultiFileReader()) as reader:
         locs = index.posting_locs[w]
-        locs=[('content/drive/MyDrive/' + bin_folder + '/' + lo[0],lo[1]) for lo in locs]
+        #locs=[('content/drive/MyDrive/' + bin_folder + lo[0],lo[1]) for lo in locs]
         b = reader.read(locs, index.df[w] * TUPLE_SIZE)
         posting_list = []
         for i in range(index.df[w]):
@@ -726,6 +728,47 @@ class InvertedIndex:
     for p in Path(base_dir).rglob(f'{name}_*.bin'):
       p.unlink()
 
+def get_top_100_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query):
+    doc_sim_vals = {}
+      # loop over each doc_id and its token-tfidf
+    for doc_id, words_tfidf in doc_tfidf_dict.items():
+        top = 0
+        doc_sim_vals[doc_id] = 0
+
+        # calculate the numerator by dot product of the doc values and query values
+        for word, word_tfidf in words_tfidf:
+            top += word_tfidf * query_tfidf_dict[word]
+        
+            
+        bottom = 315000 * len(query)
+        if bottom != 0:
+            doc_sim_vals[doc_id] = top / bottom
+
+    # return the documents ordered by cosine similarity
+    top_n = [doc_id for doc_id, _ in sorted(doc_sim_vals.items(), key=lambda item: item[1], reverse=True)][:100]
+    return top_n
+
+def get_top_n_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query):
+    doc_sim_vals = {}
+      # loop over each doc_id and its token-tfidf
+    for doc_id, words_tfidf in doc_tfidf_dict.items():
+        top = 0
+        doc_sim_vals[doc_id] = 0
+
+        # calculate the numerator by dot product of the doc values and query values
+        for word, word_tfidf in words_tfidf:
+            top += word_tfidf * query_tfidf_dict[word]
+        
+            
+        bottom = 315000 * len(query)
+        if bottom != 0:
+            doc_sim_vals[doc_id] = top / bottom
+
+    # return the documents ordered by cosine similarity
+    top_n = [doc_id for doc_id, _ in sorted(doc_sim_vals.items(), key=lambda item: item[1], reverse=True)]
+    return top_n
+    
+
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
       #load index.pkl into variable named inverted
@@ -733,6 +776,7 @@ class MyFlaskApp(Flask):
       with open("/content/drive/MyDrive/bins/title_index.pkl", 'rb') as f:
         inverted = pickle.loads(f.read())
         self.title_index = inverted
+        
 
       with open("/content/drive/MyDrive/body_bins/body_index.pkl", 'rb') as f:
         inverted = pickle.loads(f.read())
@@ -777,56 +821,37 @@ def search():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
+    doc_tfidf_dict = {}# this will save us a dict in the shape of key as the doc id and thev alue will be his score
+    query_tfidf_dict = {} # this will save us a dict in the shape of key as thwe word in the query and its value will be the word tfidf score
     query = tokenize(query)
     index = app.body_index
+    
 
     # Save postings lists to memory, calculate dfs
     word_postings = dict()
     word_df = dict()
-    for Qword in query:
+    for Qword in query:# going through all of the words in the query and calculation their tfidf scores so we will save time in our calculations
       try:
-        word_postings[Qword] = read_posting_list(index, Qword, "body_index")
+        word_postings[Qword] = read_posting_list(index, Qword, "body_index.pkl")
         word_df[Qword] = len(word_postings[Qword])
-      except:
+        tf = query.count(Qword)
+        idf = math.log10(315000/word_df[Qword])
+        tfidf = tf*idf
+        query_tfidf_dict[Qword] = tfidf
+        print("word_df", type(word_df))
+        for id, dtf in word_postings[Qword]:
+          doc_tfidf = idf*dtf / 315000
+          doc_tfidf_dict[id] = doc_tfidf_dict.get(id,[])
+          doc_tfidf_dict[id].append((Qword,doc_tfidf))
+      except Exception as e:
+        print(e)
         pass
-    # Calculate unique doc_ids
     if len(word_postings) == 0:
-      return jsonify([("sdad","")])
-    ids = []
-    id_set = set() # just to make sure there are no doubles. Could use unique on ids later instead. (If there is a memory issue)
-    for n in word_postings:
-        for i in n: # for every (doc_id, tf) in all postings lists:
-            if i[0] not in id_set:
-                id_set.add(i[0])
-                ids.append(i[0])
-    
-    # calculate number of docs,create Doc_tfidf matrix.
-    N = len(id_set)
-    Q = np.zeros((len(query)))
-    # ids is a list of unique ids. The first ids to appear are first in the list.
-    doc_tfidf_mat = np.zeros((N, len(query)))
-    doc_tfidf_mat = pd.DataFrame(doc_tfidf_mat)
-    doc_tfidf_mat.columns = query
-    doc_tfidf_mat.index = ids
-    for Qword in query:
-      try:
-        idf = math.log10(N / word_df[Qword])
-        for i in word_postings[Qword]:
-            raw = i[0]
-            tf = i[1]
-            tfidf = tf * idf
-            doc_tfidf_mat.at[raw, Qword] = tfidf
-      except:
-        pass
-    # Cosine Similarity
-    query_tfidf = generate_query_tfidf_vector(query, index)
-    print("doc_tfidf_mat",doc_tfidf_mat)
-    print("query_tfidf",query_tfidf)
-    cos_sim_dict = cosine_similarity(doc_tfidf_mat, query_tfidf)
-    top_n = get_top_n(cos_sim_dict, 100)
-    # id_title_dict = id_title.collectAsMap()
+      return jsonify([("","")])
+    top_n = get_top_100_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query) #recieve the top 100 score based on the body index
+    print("type top n", type(top_n))
     for i in top_n:
-        res.append((i[0], id_title_dict[i[0]]))
+      res.append((i, id_title_dict[i])) #  attaching the title to the doc based on the doc id
     # END SOLUTION
     return jsonify(res)
 
@@ -853,27 +878,37 @@ def search_body():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    # text_list = []
-    # doc_dict = dict()  # need to pass {doc_id: token_list} into index constructor
-    #
-    # for index, text in enumerate(text_list):
-    #     # we will use the index as doc_id. (Will cause bugs if the program is shut down and booted up again)
-    #     # Solution: save the last index to disk, and add it as an offset to the new indicies
-    #     doc_dict[index] = tokenize(text)
-    #
-    # text_index = InvertedIndex(docs=doc_dict)
-    '''
-    doc_test = {}
-    doc_test[1] = 'hi this is number 1 data'
-    doc_test[2] = 'computer is the best'
-    doc_test[3] = 'data engeeniring is the best'
-    doc_test[4] = 'data is importent'
+    doc_tfidf_dict = {} # this will save us a dict in the shape of key as the doc id and thev alue will be his score
+    query_tfidf_dict = {} # this will save us a dict in the shape of key as thwe word in the query and its value will be the word tfidf score
+    query = tokenize(query)
+    index = app.body_index # puting the index
+    
 
-    for key in doc_test.keys():
-        doc_test[key] = tokenize(doc_test[key])
-
-    text_index = InvertedIndex(docs=doc_test)
-    '''
+    # Save postings lists to memory, calculate dfs
+    word_postings = dict()
+    word_df = dict()
+    for Qword in query: # going through all of the words in the query and calculation their tfidf scores so we will save time in our calculations
+      try:
+        word_postings[Qword] = read_posting_list(index, Qword, "body_index.pkl")
+        word_df[Qword] = len(word_postings[Qword])
+        tf = query.count(Qword)
+        idf = math.log10(315000/word_df[Qword])
+        tfidf = tf*idf
+        query_tfidf_dict[Qword] = tfidf
+        print("word_df", type(word_df))
+        for id, dtf in word_postings[Qword]:
+          doc_tfidf = idf*dtf / 315000
+          doc_tfidf_dict[id] = doc_tfidf_dict.get(id,[])
+          doc_tfidf_dict[id].append((Qword,doc_tfidf))
+      except Exception as e:
+        print(e)
+        pass
+    if len(word_postings) == 0:
+      return jsonify([("","")])
+    top_n = get_top_n_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query) #recieve the top score based on the body index
+    print("type top n", type(top_n))
+    for i in top_n:
+      res.append((i, id_title_dict[i])) # attaching the title name based on the id of the doc
     # END SOLUTION
     return jsonify(res)
 
@@ -1006,72 +1041,3 @@ def id_title_tup(id):
 
 # Tests
 # NOTE May need token2bucket. Our tokenizer isnt from a3 gcp.
-'''
-def body_index():
-    res = []
-    query = "computer engineering" # query = request.args.get('query', '')
-    if len(query) == 0:
-      return jsonify(res)
-    
-    res = []
-    query = "computer engineering" # query = request.args.get('query', '')
-    if len(query) == 0:
-      return jsonify(res)
-    
-    # BEGIN SOLUTION
-    # text_list = []
-    # doc_dict = dict()  # need to pass {doc_id: token_list} into index constructor
-    #
-    # for index, text in enumerate(text_list):
-    #     # we will use the index as doc_id. (Will cause bugs if the program is shut down and booted up again)
-    #     # Solution: save the last index to disk, and add it as an offset to the new indicies
-    #     doc_dict[index] = tokenize(text)
-    #
-    # text_index = InvertedIndex(docs=doc_dict)
-
-    query = tokenize(query)
-    index = inverted
-    words, p_lst = get_posting_gen(index)
-    
-    #doc_tfidf_mat = generate_document_tfidf_matrix(query, index, words, p_lst)
-    #print(doc_tfidf_mat)
-    #print(doc_tfidf_mat)
-    #computing the tfidf matrix 
-    #calculating N (number of docs relevnt to a qurey)
-    n = []
-    for Qword in query:
-      ind = words.index(Qword)
-      n.extend(p_lst[ind])
-    n = list(dict.fromkeys(n))
-    N = len(n)
-    Q = np.zeros((len(words)))
-    ids = []
-    for i in n:
-      ids.append(i[0])
-    doc_tfidf_mat = np.zeros((N,len(words)))
-    doc_tfidf_mat = pd.DataFrame(doc_tfidf_mat)
-    doc_tfidf_mat.columns = words
-    doc_tfidf_mat.index = ids
-    for Qword in query:
-      ind = words.index(Qword)
-      df = len(p_lst[ind])
-      idf = math.log2(N/df)
-      for i in p_lst[ind]:
-        raw = i[0]
-        tf = i[1]
-        tfidf = tf*df
-        doc_tfidf_mat.at[raw,Qword] = tfidf
-
-    query_tfidf = generate_query_tfidf_vector1(query, words, N, p_lst)
-
-    cos_sim_dict = cosine_similarity(doc_tfidf_mat, query_tfidf)
-    top_n = get_top_n(cos_sim_dict, 100)
-    #id_title_dict = id_title.collectAsMap()
-    for i in top_n:
-      res.append((i[0],id_title_dict[i[0]]))
-
-    
-    # END SOLUTION
-    return jsonify(res)
-#body_index()
-'''
