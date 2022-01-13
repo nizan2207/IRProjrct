@@ -211,7 +211,7 @@ class MultiFileReader:
         return False
 
 #reading and saving the titkle id dict so we cxan connect id to their title
-id_title_pickle = "id_title_dict.pickle"
+id_title_pickle = "/content/drive/MyDrive/id_title_dict.pkl"
 with open(id_title_pickle, 'rb') as f:
   id_title_dict = dict(pickle.loads(f.read()))
 """### Functions from previous Assignments"""
@@ -542,7 +542,7 @@ class MultiFileReader:
         b = []
         for f_name, offset in locs:
             if f_name not in self._open_files:
-                self._open_files[f_name] = open(f_name, 'rb')
+              self._open_files[f_name] = open(f_name, 'rb')
             f = self._open_files[f_name]
             f.seek(offset)
             #nizan
@@ -569,9 +569,19 @@ TUPLE_SIZE = 6       # We're going to pack the doc_id and tf values in this
 TF_MASK = 2 ** 16 - 1 # Masking the 16 low bits of an integer
 
 DL = {}  # We're going to update and calculate this after each document. This will be usefull for the calculation of AVGDL (utilized in BM25)
-def read_posting_list(index, w):
+def read_posting_list(index, w, name):
+    # dynamically find the bin's folder based on its name
+    bin_folder = ""
+    if name == "body_index":
+      bin_folder = "body_bins"
+    elif name == "title_index":  
+      bin_folder = "bins"
+    elif name == "anchor_index":
+      bin_fodler = "anchor_bins"
+    
     with closing(MultiFileReader()) as reader:
         locs = index.posting_locs[w]
+        locs=[('content/drive/MyDrive/' + bin_folder + '/' + lo[0],lo[1]) for lo in locs]
         b = reader.read(locs, index.df[w] * TUPLE_SIZE)
         posting_list = []
         for i in range(index.df[w]):
@@ -720,12 +730,19 @@ class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
       #load index.pkl into variable named inverted
       # self.index = InvertedIndex.read_index()
-      with open("body_index.pkl", 'rb') as f:
+      with open("/content/drive/MyDrive/bins/title_index.pkl", 'rb') as f:
         inverted = pickle.loads(f.read())
-        #inverted = InvertedIndex(inverted)
-        #inverted.posting_locs = super_posting_locs
-        self.inverted = inverted
+        self.title_index = inverted
+
+      with open("/content/drive/MyDrive/body_bins/body_index.pkl", 'rb') as f:
+        inverted = pickle.loads(f.read())
+        self.body_index = inverted
+      
       """
+      with open("/content/drive/MyDrive/anchor_bins/anchor_index.pkl", 'rb') as f:
+        inverted = pickle.loads(f.read())
+        self.anchor_index = inverted
+      
       # PageRank
       with open('doc_PR_dict.pkl', 'rb') as f:
           self.doc_PR_dict = pickle.loads(f.open())
@@ -761,16 +778,20 @@ def search():
       return jsonify(res)
     # BEGIN SOLUTION
     query = tokenize(query)
-    index = app.inverted
+    index = app.body_index
 
     # Save postings lists to memory, calculate dfs
     word_postings = dict()
     word_df = dict()
     for Qword in query:
-        word_postings[Qword] = read_posting_list(index, Qword)
+      try:
+        word_postings[Qword] = read_posting_list(index, Qword, "body_index")
         word_df[Qword] = len(word_postings[Qword])
-
+      except:
+        pass
     # Calculate unique doc_ids
+    if len(word_postings) == 0:
+      return jsonify([("sdad","")])
     ids = []
     id_set = set() # just to make sure there are no doubles. Could use unique on ids later instead. (If there is a memory issue)
     for n in word_postings:
@@ -788,15 +809,19 @@ def search():
     doc_tfidf_mat.columns = query
     doc_tfidf_mat.index = ids
     for Qword in query:
+      try:
         idf = math.log10(N / word_df[Qword])
         for i in word_postings[Qword]:
             raw = i[0]
             tf = i[1]
             tfidf = tf * idf
             doc_tfidf_mat.at[raw, Qword] = tfidf
-
+      except:
+        pass
     # Cosine Similarity
     query_tfidf = generate_query_tfidf_vector(query, index)
+    print("doc_tfidf_mat",doc_tfidf_mat)
+    print("query_tfidf",query_tfidf)
     cos_sim_dict = cosine_similarity(doc_tfidf_mat, query_tfidf)
     top_n = get_top_n(cos_sim_dict, 100)
     # id_title_dict = id_title.collectAsMap()
