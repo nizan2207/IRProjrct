@@ -17,9 +17,10 @@ import nltk
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 from google.cloud import storage
+import traceback
 import hashlib
 
-
+# tokenize either with just english or all stopwords
 def tokenize(text, stopwords_set='english'):
     """
     This function aims in tokenize a text into a list of tokens. Moreover, it filter stopwords.
@@ -88,67 +89,13 @@ def word_count(text, id):
   res = [(entry[0], tuple(entry[1])) for entry in word_dict.items()]
   return res
 
-
-def reduce_word_counts(unsorted_pl):
-  ''' Returns a sorted posting list by wiki_id.
-  Parameters:
-  -----------
-    unsorted_pl: list of tuples
-      A list of (wiki_id, tf) tuples 
-  Returns:
-  --------
-    list of tuples
-      A sorted posting list.
-  '''
-  l = list(unsorted_pl)
-  return sorted(l, key = lambda item: item[0])
-
-def calculate_df(postings):
-  ''' Takes a posting list RDD and calculate the df for each token.
-  Parameters:
-  -----------
-    postings: RDD
-      An RDD where each element is a (token, posting_list) pair.
-  Returns:
-  --------
-    RDD
-      An RDD where each element is a (token, df) pair.
-  '''
-  return postings.mapValues(len) 
-
 NUM_BUCKETS = 124
 def token2bucket_id(token):
   return int(_hash(token),16) % NUM_BUCKETS
 
-def partition_postings_and_write(postings):
-  ''' A function that partitions the posting lists into buckets, writes out 
-  all posting lists in a bucket to disk, and returns the posting locations for 
-  each bucket. Partitioning should be done through the use of `token2bucket` 
-  above. Writing to disk should use the function  `write_a_posting_list`, a 
-  static method implemented in inverted_index_colab.py under the InvertedIndex 
-  class. 
-  Parameters:
-  -----------
-    postings: RDD
-      An RDD where each item is a (w, posting_list) pair.
-  Returns:
-  --------
-    RDD
-      An RDD where each item is a posting locations dictionary for a bucket. The
-      posting locations maintain a list for each word of file locations and 
-      offsets its posting list was written to. See `write_a_posting_list` for 
-      more details.
-  '''
-  r1 = postings.map(lambda tup: (token2bucket_id(tup[0]), [tup]))
-  r2 = r1.reduceByKey(lambda p_lst1, p_lst2: p_lst1 + p_lst2) # group_by_key
-  r3 = r2.map(lambda tup: InvertedIndex.write_a_posting_list(tup))
-  return r3
-
 """# Inverted Index"""
 
 BLOCK_SIZE = 1999998
-
-
 class MultiFileWriter:
     """ Sequential binary writer to multiple files of up to BLOCK_SIZE each. """
 
@@ -177,94 +124,12 @@ class MultiFileWriter:
     def close(self):
         self._f.close()
 
-
-class MultiFileReader:
-    """ Sequential binary reader of multiple files of up to BLOCK_SIZE each. """
-
-    def __init__(self):
-        self._open_files = {}
-
-    def read(self, locs, n_bytes):
-        b = []
-        for f_name, offset in locs:
-            if f_name not in self._open_files:
-                self._open_files[f_name] = open(f_name, 'rb')
-            f = self._open_files[f_name]
-            f.seek(offset)
-            #nizan
-            #n_read = min(n_bytes, BLOCK_SIZE - offset)
-            #implement min function in myself
-            if n_bytes < BLOCK_SIZE - offset:
-              n_read = n_bytes
-            else:
-              n_read = BLOCK_SIZE - offset
-            b.append(f.read(n_read))
-            n_bytes -= n_read
-        return b''.join(b)
-
-    def close(self):
-        for f in self._open_files.values():
-            f.close()
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
-        return False
-
-#reading and saving the titkle id dict so we cxan connect id to their title
+# reading and saving the titkle id dict so we can connect id to their title
 id_title_pickle = "/content/drive/MyDrive/id_title_dict.pkl"
 with open(id_title_pickle, 'rb') as f:
   id_title_dict = dict(pickle.loads(f.read()))
+
 """### Functions from previous Assignments"""
-
-def get_posting_gen(index):
-    """
-    This function returning the generator working with posting list.
-
-    Parameters:
-    ----------
-    index: inverted index
-    """
-    words, pls = zip(*index.posting_lists_iter())
-    return words, pls
-
-def cosine_similarity(D, Q):
-    """
-    Calculate the cosine similarity for each candidate document in D and a given query (e.g., Q).
-    Generate a dictionary of cosine similarity scores
-    key: doc_id
-    value: cosine similarity score
-
-    Parameters:
-    -----------
-    D: DataFrame of tfidf scores.
-
-    Q: vectorized query with tfidf scores
-
-    Returns:
-    -----------
-    dictionary of cosine similarity score as follows:
-                                                                key: document id (e.g., doc_id)
-                                                                value: cosine similarty score.
-    """
-    doc_sizes = np.linalg.norm(D, axis=1)
-    query_size = np.linalg.norm(Q)
-    cos_normalizers = doc_sizes * query_size
-    dot_prod = np.dot(D, Q)  # supposed to give a 1d
-    cos_sims = dot_prod / cos_normalizers
-    sim_dict = dict()
-    for ind, doc_id in enumerate(D.T.columns):
-        sim_dict[doc_id] = cos_sims[ind]
-    return sim_dict
-
-def spark_fast_cosine(doc_mat, vect_q):
-  # 1. init zeros array of size n
-  float_scores = np.zeros(doc_mat.shape[0])
-
-  # 2. for each doc, init length[d] to be length of doc d.
-  # TODO: after you know how to get length of doc, 
-
-
-
 def generate_document_tfidf_matrix(query_to_search, index, words, pls):
     """
     Generate a DataFrame `D` of tfidf scores for a given query.
@@ -323,7 +188,6 @@ def generate_query_tfidf_vector(query_to_search, index):
     -----------
     vectorized query with tfidf scores
     """
-
     epsilon = .0000001
     total_vocab_size = len(index.term_total)
     Q = np.zeros((total_vocab_size))
@@ -334,7 +198,6 @@ def generate_query_tfidf_vector(query_to_search, index):
             tf = counter[token] / len(query_to_search)  # term frequency divded by the length of the query
             df = index.df[token]
             idf = math.log((len(DL)) / (df + epsilon), 10)  # smoothing
-
             try:
                 ind = term_vector.index(token)
                 Q[ind] = tf * idf
@@ -415,36 +278,6 @@ def get_candidate_documents_and_scores(query_to_search, index, words, pls):
                 candidates[(doc_id, term)] = candidates.get((doc_id, term), 0) + tfidf
 
     return candidates
-
-def get_topN_score_for_queries(queries_to_search, index, N=3):
-    """
-    Generate a dictionary that gathers for every query its topN score.
-
-    Parameters:
-    -----------
-    queries_to_search: a dictionary of queries as follows:
-                                                        key: query_id
-                                                        value: list of tokens.
-    index:           inverted index loaded from the corresponding files.
-    N: Integer. How many documents to retrieve. This argument is passed to the topN function. By default N = 3, for the topN function.
-
-    Returns:
-    -----------
-    return: a dictionary of queries and topN pairs as follows:
-                                                        key: query_id
-                                                        value: list of pairs in the following format:(doc_id, score).
-    """
-    words, p_lst = get_posting_gen(index)
-
-    # inits dict with empty lists
-    top_n_dict = dict(zip(queries_to_search.keys(), [[]] * len(queries_to_search.keys())))
-
-    for query_id, toks in queries_to_search.items():
-        doc_tfidf_mat = generate_document_tfidf_matrix(toks, index, words, p_lst)
-        query_tfidf = generate_query_tfidf_vector(toks, index)
-        cos_sim_dict = cosine_similarity(doc_tfidf_mat, query_tfidf)
-        top_n_dict[query_id] = get_top_n(cos_sim_dict, N)
-    return top_n_dict
 
 def get_top_n(sim_dict,N=3):
     """ 
@@ -538,11 +371,11 @@ class MultiFileReader:
     def __init__(self):
         self._open_files = {}
 
-    def read(self, locs, n_bytes):
+    def read(self, locs, n_bytes, bin_path='body_bins'):
         b = []
         for f_name, offset in locs:
             if f_name not in self._open_files:
-              path = '/content/drive/MyDrive/body_bins/'
+              path = '/content/drive/MyDrive/' + bin_path + '/'
               f_name = path + f_name
               self._open_files[f_name] = open(f_name, 'rb')
             f = self._open_files[f_name]
@@ -574,17 +407,20 @@ DL = {}  # We're going to update and calculate this after each document. This wi
 def read_posting_list(index, w, name):
     # dynamically find the bin's folder based on its name
     bin_folder = ""
-    if name == "body_index":
+    if name == "body_index" or name == "body_index.pkl":
       bin_folder = "body_bins"
     elif name == "title_index":  
       bin_folder = "bins"
     elif name == "anchor_index":
-      bin_fodler = "anchor_bins"
+      bin_folder = "posting_anchor"
     
     with closing(MultiFileReader()) as reader:
         locs = index.posting_locs[w]
-        #locs=[('content/drive/MyDrive/' + bin_folder + lo[0],lo[1]) for lo in locs]
-        b = reader.read(locs, index.df[w] * TUPLE_SIZE)
+        try:
+            b = reader.read(locs, index.df[w] * TUPLE_SIZE, bin_path=bin_folder)
+        except Exception as e:
+            return []
+
         posting_list = []
         for i in range(index.df[w]):
             doc_id = int.from_bytes(b[i * TUPLE_SIZE:i * TUPLE_SIZE + 4], 'big')
@@ -624,7 +460,6 @@ class InvertedIndex:
     """
     with closing(MultiFileReader()) as reader:
       for w, locs in self.posting_locs.items():
-        #print(f"PostingLocsIter: w:{w}, \nlocs:{locs}")
         # read a certain number of bytes into variable b
         b = reader.read(locs, self.df[w] * TUPLE_SIZE)
         posting_list = []
@@ -697,17 +532,6 @@ class InvertedIndex:
     # save file locations to index
     self.posting_locs[w].extend(locs)
 
-    # This was the old posting list before we replaced it with the above
-  #def read_posting_list(self,w):
-  #  with closing(MultiFileReader()) as reader:
-  #    locs = self.posting_locs[w]
-  #    b= reader.read(locs, self.df[w]*TUPLE_SIZE)
-  #    posting_dict = {}
-  #    for i in range(self.df[w]):
-  #      doc_id = int.from_bytes(b[i*TUPLE_SIZE:i*TUPLE_SIZE+4],'big')
-  #      tf = int.from_bytes(b[i*TUPLE_SIZE+4:(i+1)*TUPLE_SIZE], 'big')
-  #      posting_dict[doc_id] = tf
-  #    return posting_dict
   def __getstate__(self):
     """ Modify how the object is pickled by removing the internal posting lists
         from the object's state dictionary. 
@@ -729,18 +553,16 @@ class InvertedIndex:
       p.unlink()
 
 def get_top_100_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query):
-    doc_sim_vals = {}
-      # loop over each doc_id and its token-tfidf
+    # make an empty dict of similarity values
+    doc_sim_vals = dict()
     for doc_id, words_tfidf in doc_tfidf_dict.items():
-        top = 0
-        doc_sim_vals[doc_id] = 0
+        top, doc_sim_vals[doc_id]  = 0, 0
 
-        # calculate the numerator by dot product of the doc values and query values
+        # calculate the numerator
         for word, word_tfidf in words_tfidf:
             top += word_tfidf * query_tfidf_dict[word]
         
-            
-        bottom = 315000 * len(query)
+        bottom = 315000 * len(query)  # assume the average doc length and multiply by query length.
         if bottom != 0:
             doc_sim_vals[doc_id] = top / bottom
 
@@ -749,20 +571,18 @@ def get_top_100_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query):
     return top_n
 
 def get_top_n_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query):
-    doc_sim_vals = {}
-      # loop over each doc_id and its token-tfidf
+    # make an empty dict of similarity values
+    doc_sim_vals = dict()
     for doc_id, words_tfidf in doc_tfidf_dict.items():
-        top = 0
-        doc_sim_vals[doc_id] = 0
+        top, doc_sim_vals[doc_id] = 0, 0  # initialize the dot product and the value for doc_id to 0
 
-        # calculate the numerator by dot product of the doc values and query values
+        # calculate the dot product. (top part of the function)
         for word, word_tfidf in words_tfidf:
             top += word_tfidf * query_tfidf_dict[word]
-        
-            
-        bottom = 315000 * len(query)
+
+        bottom = 315000 * len(query)  # assume the average doc length and multiply by query length.
         if bottom != 0:
-            doc_sim_vals[doc_id] = top / bottom
+            doc_sim_vals[doc_id] = top / bottom  # calculate relative cosine sim
 
     # return the documents ordered by cosine similarity
     top_n = [doc_id for doc_id, _ in sorted(doc_sim_vals.items(), key=lambda item: item[1], reverse=True)]
@@ -770,7 +590,7 @@ def get_top_n_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query):
     
 
 class MyFlaskApp(Flask):
-    def run(self, host=None, port=None, debug=None, **options):
+    def run(self, host=None, port=None, debug=False, **options):
       #load index.pkl into variable named inverted
       # self.index = InvertedIndex.read_index()
       with open("/content/drive/MyDrive/bins/title_index.pkl", 'rb') as f:
@@ -782,11 +602,11 @@ class MyFlaskApp(Flask):
         inverted = pickle.loads(f.read())
         self.body_index = inverted
       
-      """
-      with open("/content/drive/MyDrive/anchor_bins/anchor_index.pkl", 'rb') as f:
+
+      with open("/content/drive/MyDrive/posting_anchor/anchor_index.pkl", 'rb') as f:
         inverted = pickle.loads(f.read())
         self.anchor_index = inverted
-      
+      """
       # PageRank
       with open('doc_PR_dict.pkl', 'rb') as f:
           self.doc_PR_dict = pickle.loads(f.open())
@@ -821,39 +641,11 @@ def search():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    doc_tfidf_dict = {}# this will save us a dict in the shape of key as the doc id and thev alue will be his score
-    query_tfidf_dict = {} # this will save us a dict in the shape of key as thwe word in the query and its value will be the word tfidf score
-    query = tokenize(query)
-    index = app.body_index
-    
-
-    # Save postings lists to memory, calculate dfs
-    word_postings = dict()
-    word_df = dict()
-    for Qword in query:# going through all of the words in the query and calculation their tfidf scores so we will save time in our calculations
-      try:
-        word_postings[Qword] = read_posting_list(index, Qword, "body_index.pkl")
-        word_df[Qword] = len(word_postings[Qword])
-        tf = query.count(Qword)
-        idf = math.log10(315000/word_df[Qword])
-        tfidf = tf*idf
-        query_tfidf_dict[Qword] = tfidf
-        print("word_df", type(word_df))
-        for id, dtf in word_postings[Qword]:
-          doc_tfidf = idf*dtf / 315000
-          doc_tfidf_dict[id] = doc_tfidf_dict.get(id,[])
-          doc_tfidf_dict[id].append((Qword,doc_tfidf))
-      except Exception as e:
-        print(e)
-        pass
-    if len(word_postings) == 0:
-      return jsonify([("","")])
-    top_n = get_top_100_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query) #recieve the top 100 score based on the body index
-    print("type top n", type(top_n))
-    for i in top_n:
-      res.append((i, id_title_dict[i])) #  attaching the title to the doc based on the doc id
-    # END SOLUTION
-    return jsonify(res)
+    bod = body_search_100(app.body_index, query)
+    title = title_search(app.title_index, query)
+    m = merge(bod, title, 20)
+    print(m)
+    return jsonify(m)
 
 @app.route("/search_body")
 def search_body():
@@ -874,41 +666,12 @@ def search_body():
 
     # NOTE May need token2bucket. Our tokenizer isnt from a3 gcp.
     res = []
-    query = "first test"#request.args.get('query', '')
+    request.args.get('query', '')
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    doc_tfidf_dict = {} # this will save us a dict in the shape of key as the doc id and thev alue will be his score
-    query_tfidf_dict = {} # this will save us a dict in the shape of key as thwe word in the query and its value will be the word tfidf score
-    query = tokenize(query)
-    index = app.body_index # puting the index
-    
-
-    # Save postings lists to memory, calculate dfs
-    word_postings = dict()
-    word_df = dict()
-    for Qword in query: # going through all of the words in the query and calculation their tfidf scores so we will save time in our calculations
-      try:
-        word_postings[Qword] = read_posting_list(index, Qword, "body_index.pkl")
-        word_df[Qword] = len(word_postings[Qword])
-        tf = query.count(Qword)
-        idf = math.log10(315000/word_df[Qword])
-        tfidf = tf*idf
-        query_tfidf_dict[Qword] = tfidf
-        print("word_df", type(word_df))
-        for id, dtf in word_postings[Qword]:
-          doc_tfidf = idf*dtf / 315000
-          doc_tfidf_dict[id] = doc_tfidf_dict.get(id,[])
-          doc_tfidf_dict[id].append((Qword,doc_tfidf))
-      except Exception as e:
-        print(e)
-        pass
-    if len(word_postings) == 0:
-      return jsonify([("","")])
-    top_n = get_top_n_ids_after_cossim(doc_tfidf_dict,query_tfidf_dict,query) #recieve the top score based on the body index
-    print("type top n", type(top_n))
-    for i in top_n:
-      res.append((i, id_title_dict[i])) # attaching the title name based on the id of the doc
+    print("Search_body")
+    res = body_search_100(app.body_index, tokenize(query, stopwords_set="all"))
     # END SOLUTION
     return jsonify(res)
 
@@ -936,6 +699,19 @@ def search_title():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
+    # setup - tokenize query, rename index
+    tit_ind = app.title_index
+    query = tokenize(query, stopwords_set='all')
+
+    doc_counts = dict()
+    for word in query:
+        word_postings = read_posting_list(tit_ind, word, "title_index")
+        for id, tf in word_postings:
+            if id not in doc_counts.keys():
+                doc_counts[id] = 0
+            doc_counts[id] += tf
+    res = sorted(list(doc_counts.items()), key=lambda item: item[1], reverse=True)
+    res = [(item[0], id_title_dict[item[0]]) for item in res]
 
     # END SOLUTION
     return jsonify(res)
@@ -963,7 +739,7 @@ def search_anchor():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    
+    res = anchor_search(app.anchor_index, query)
     # END SOLUTION
     return jsonify(res)
 
@@ -1029,6 +805,112 @@ def get_pageview():
     # END SOLUTION
     return jsonify(res)
 
+def title_search(index, query):
+    # setup - tokenize query, rename index
+    tit_ind = app.title_index
+    if type(query) is not list:
+        query = tokenize(query, stopwords_set='all') 
+
+    doc_counts = dict()
+    for word in query:
+        word_postings = read_posting_list(tit_ind, word, "title_index")
+        print("word_postings ", word_postings)
+        for id, tf in word_postings:
+            if id not in doc_counts.keys():
+                doc_counts[id] = 0
+            doc_counts[id] += tf
+    res = sorted(list(doc_counts.items()), key=lambda item: item[1], reverse=True)
+    res = [(item[0], id_title_dict[item[0]]) for item in res]
+    return res
+
+def body_search_100(index, query):
+    if len(query) == 0:
+        return jsonify(res)
+    if type(query) is str:
+        query = tokenize(query, stopwords_set='all')
+    # BEGIN SOLUTION
+    doc_tfidf_dict = {}  # this will save us a dict in the shape of key as the doc id and thev alue will be his score
+    query_tfidf_dict = {}  # this will save us a dict in the shape of key as thwe word in the query and its value will be the word tfidf score
+
+    # Save postings lists to memory, calculate dfs
+    word_postings = dict()
+    word_df = dict()
+    for Qword in query:  # going through all of the words in the query and calculation their tfidf scores so we will save time in our calculations
+        try:
+            # Here we try to calculate fast_cosine from chapter 7, while normalizing by length. Our calc_DL function
+            # didn't run independently from Flask, so we replaced it with what seemed to be a reasonable average.
+            word_postings[Qword] = read_posting_list(index, Qword, "body_index.pkl")
+            word_df[Qword] = len(word_postings[Qword])
+
+            # calculate tfidf
+            tf = query.count(Qword)
+            #print(f"Word: {Qword}, word_df: {word_df[Qword]}")
+            idf = math.log10(315000 / word_df[Qword])
+            tfidf = tf * idf
+            query_tfidf_dict[Qword] = tfidf
+            for id, doc_tf in word_postings[Qword]:
+                doc_tfidf = idf * doc_tf / 315000
+                doc_tfidf_dict[id] = doc_tfidf_dict.get(id, [])
+                doc_tfidf_dict[id].append((Qword, doc_tfidf))
+        except Exception as e:
+            print(e)
+        
+    if len(word_postings) == 0:
+        return jsonify([("", "")])
+    top_n = get_top_100_ids_after_cossim(doc_tfidf_dict, query_tfidf_dict,
+                                         query)  # recieve the top 100 score based on the body index
+    res = []
+    for i in top_n:
+        res.append((i, id_title_dict[i]))  # attaching the title to the doc based on the doc id
+    return res
+
+def anchor_search(index, query):
+    # setup - tokenize query, rename index
+    tit_ind = index
+    if type(query) is not list:
+        query = tokenize(query, stopwords_set='all')
+
+    # count the anchor frequenices by going through the posting
+    doc_counts = dict()
+    for word in query:
+        word_postings = read_posting_list(tit_ind, word, "anchor_index")
+        for id, tf in word_postings:
+            if id not in doc_counts.keys():
+                doc_counts[id] = 0
+            doc_counts[id] += tf
+    res = sorted(list(doc_counts.items()), key=lambda item: item[1], reverse=True)
+
+    # print the id, title for every item we have a title for
+    res2 = []
+    for item in res:
+        try:
+            res2.append((item[0], id_title_dict[item[0]]))
+        except Exception as e:
+            pass
+    return res2
+
+def calc_DL():
+    DL = dict()
+    counter = 0
+    for word in inverted.df.keys():
+        p_lst = read_posting_list(inverted, word, "body_index.pkl")
+        for doc_id, tf in p_lst:
+            if doc_id not in DL.keys():
+                DL[doc_id] = 0
+            DL[doc_id] += tf
+            if counter % 20 == 0:
+                print(f"Counter: {counter}, word: {word}")
+    pickle.dump(DL)
+
+# Merges 2 - 3 lists by taking the last num1 items in list 1 and replacing them with the first num1 items in list2.
+# (start from 40)
+def merge(res1, res2, num1, res3=None, num2=0):
+    limit = min(40, len(res1))
+    if num2 == 0:
+        return res1[:-num1] + res2[:num1]
+    if res3 != None:
+        assert num1 + num2 < limit  # make sure that the list cant grow from the merge.
+        return res1[:limit - num1 - num2] + res2[:num1] + res3[:num2 - 1]
 
 if __name__ == '__main__':
     #run flask app
